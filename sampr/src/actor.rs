@@ -9,6 +9,14 @@ pub struct Addr<A: Actor> {
     msg_tx: mpsc::Sender<Envelope<A>>,
 }
 
+impl<A: Actor> Clone for Addr<A> {
+    fn clone(&self) -> Self {
+        Addr {
+            msg_tx: self.msg_tx.clone(),
+        }
+    }
+}
+
 impl<A: Actor> Addr<A> {
     pub async fn send<M>(&self, msg: M)
     where

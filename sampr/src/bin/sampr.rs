@@ -1,4 +1,5 @@
-use sampr::{Actor, Handler, Message};
+use async_trait::async_trait;
+use sampr::{Actor, Addr, Handler, Message};
 
 struct Writer;
 
@@ -11,8 +12,9 @@ impl Actor for Writer {
     }
 }
 
+#[async_trait]
 impl Handler<OutputMsg> for Writer {
-    fn handle(&mut self, msg: OutputMsg) {
+    async fn handle(&mut self, msg: OutputMsg) {
         log::info!("writer says: {}", msg.0);
     }
 }
@@ -29,9 +31,19 @@ impl Actor for Generator {
     }
 }
 
-struct OutputMsg(String);
+#[async_trait]
+impl Handler<AddrMsg> for Generator {
+    async fn handle(&mut self, msg: AddrMsg) {
+        log::info!("send ping");
+        msg.0.send(OutputMsg(String::from("PING"))).await;
+    }
+}
 
+struct OutputMsg(String);
 impl Message for OutputMsg {}
+
+struct AddrMsg(Addr<Writer>);
+impl Message for AddrMsg {}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -43,12 +55,17 @@ async fn main() {
     let writer = Writer.start();
 
     let awriter = writer.address();
+    let awriter2: Addr<Writer> = awriter.clone();
+    let agenerator = generator.address();
+
     awriter.send(OutputMsg(String::from("hello"))).await;
     awriter.send(OutputMsg(String::from("world"))).await;
     awriter.send(OutputMsg(String::from("!"))).await;
+    agenerator.send(AddrMsg(awriter2)).await;
     awriter.send(OutputMsg(String::from("I'm alive"))).await;
 
     drop(awriter);
+    drop(agenerator);
 
     log::info!("all messages sent, waiting for shutdown");
     generator.wait_for_shutdown().await;

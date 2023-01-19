@@ -1,15 +1,18 @@
 use crate::actor::Actor;
 
+use async_trait::async_trait;
 use std::fmt;
 
 pub trait Message: Send + 'static {}
 
+#[async_trait]
 pub trait Handler<M: Message> {
-    fn handle(&mut self, msg: M);
+    async fn handle(&mut self, msg: M);
 }
 
+#[async_trait]
 pub trait Unpackable<A: Actor> {
-    fn handle_message(&mut self, actor: &mut A);
+    async fn handle_message(&mut self, actor: &mut A);
 }
 
 struct InnerEnvelope<M>
@@ -25,14 +28,15 @@ impl<M: Message + Send> InnerEnvelope<M> {
     }
 }
 
+#[async_trait]
 impl<A, M> Unpackable<A> for InnerEnvelope<M>
 where
     A: Actor + Handler<M>,
     M: Message,
 {
-    fn handle_message(&mut self, actor: &mut A) {
+    async fn handle_message(&mut self, actor: &mut A) {
         let msg = self.msg.take().unwrap();
-        <A as Handler<M>>::handle(actor, msg);
+        <A as Handler<M>>::handle(actor, msg).await
     }
 }
 
@@ -58,9 +62,9 @@ impl<A: Actor> Envelope<A> {
     }
 }
 
+#[async_trait]
 impl<A: Actor> Unpackable<A> for Envelope<A> {
-    fn handle_message(&mut self, actor: &mut A) {
-        log::info!("handling message in inner envelope");
-        self.msg.handle_message(actor)
+    async fn handle_message(&mut self, actor: &mut A) {
+        self.msg.handle_message(actor).await
     }
 }

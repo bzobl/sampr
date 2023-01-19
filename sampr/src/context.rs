@@ -35,7 +35,7 @@ impl<A: Actor> Context<A> {
                     break;
                 }
             };
-            envelope.handle_message(&mut self.actor);
+            envelope.handle_message(&mut self.actor).await;
         }
     }
 }
