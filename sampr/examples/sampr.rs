@@ -37,9 +37,13 @@ impl Actor for Generator {
 
 #[async_trait]
 impl Handler<AddrMsg> for Generator {
-    async fn handle(&mut self, msg: AddrMsg) {
+    async fn handle(&mut self, msg: AddrMsg) -> Result<(), Error> {
         log::info!("send ping");
-        msg.0.send(OutputMsg(String::from("PING"))).await;
+        if let Err(e) = msg.0.send(OutputMsg(String::from("PING"))).await {
+            Err(e)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -50,7 +54,7 @@ impl Message for OutputMsg {
 
 struct AddrMsg(Addr<Writer>);
 impl Message for AddrMsg {
-    type Result = ();
+    type Result = Result<(), Error>;
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -84,7 +88,7 @@ async fn main() {
         "writer wrote {} times",
         awriter.send(OutputMsg(String::from("!"))).await.unwrap()
     );
-    agenerator.send(AddrMsg(awriter2)).await.unwrap();
+    agenerator.send(AddrMsg(awriter2)).await.unwrap().unwrap();
     log::info!(
         "writer wrote {} times",
         awriter
