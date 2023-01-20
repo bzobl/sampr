@@ -23,7 +23,9 @@ impl<A: Actor> Context<A> {
 
             self.actor.stopped();
 
-            shutdown_tx.send(());
+            if let Err(_e) = shutdown_tx.send(()) {
+                log::debug!("user dropped ActorHandle early");
+            }
         });
     }
 
