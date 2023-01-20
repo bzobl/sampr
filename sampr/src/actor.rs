@@ -3,6 +3,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::{
     context::Context,
     message::{Envelope, Handler, Message},
+    Error,
 };
 
 pub struct Addr<A: Actor> {
@@ -18,12 +19,14 @@ impl<A: Actor> Clone for Addr<A> {
 }
 
 impl<A: Actor> Addr<A> {
-    pub async fn send<M>(&self, msg: M)
+    pub async fn send<M>(&self, msg: M) -> Result<M::Result, Error>
     where
         A: Handler<M>,
         M: Message + Send,
     {
-        self.msg_tx.send(Envelope::pack(msg)).await.unwrap();
+        let (result_tx, result_rx) = oneshot::channel();
+        self.msg_tx.send(Envelope::pack(msg, result_tx)).await?;
+        Ok(result_rx.await?)
     }
 }
 

@@ -1,21 +1,26 @@
 use async_trait::async_trait;
 use sampr::{Actor, Addr, Handler, Message};
 
-struct Writer;
+#[derive(Default)]
+struct Writer {
+    count: u32,
+}
 
 impl Actor for Writer {
     fn started(&mut self) {
         log::info!("Writer has started");
     }
     fn stopped(&mut self) {
-        log::info!("Writer has stopped");
+        log::info!("Writer has stopped. Sent {} messages in total", self.count);
     }
 }
 
 #[async_trait]
 impl Handler<OutputMsg> for Writer {
-    async fn handle(&mut self, msg: OutputMsg) {
-        log::info!("writer says: {}", msg.0);
+    async fn handle(&mut self, msg: OutputMsg) -> u32 {
+        log::info!("writer says (count={}): {}", self.count, msg.0);
+        self.count += 1;
+        self.count
     }
 }
 
@@ -40,10 +45,14 @@ impl Handler<AddrMsg> for Generator {
 }
 
 struct OutputMsg(String);
-impl Message for OutputMsg {}
+impl Message for OutputMsg {
+    type Result = u32;
+}
 
 struct AddrMsg(Addr<Writer>);
-impl Message for AddrMsg {}
+impl Message for AddrMsg {
+    type Result = ();
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -52,17 +61,38 @@ async fn main() {
     log::info!("hello world");
 
     let generator = Generator.start();
-    let writer = Writer.start();
+    let writer = Writer::default().start();
 
     let awriter = writer.address();
     let awriter2: Addr<Writer> = awriter.clone();
     let agenerator = generator.address();
 
-    awriter.send(OutputMsg(String::from("hello"))).await;
-    awriter.send(OutputMsg(String::from("world"))).await;
-    awriter.send(OutputMsg(String::from("!"))).await;
-    agenerator.send(AddrMsg(awriter2)).await;
-    awriter.send(OutputMsg(String::from("I'm alive"))).await;
+    log::info!(
+        "writer wrote {} times",
+        awriter
+            .send(OutputMsg(String::from("hello")))
+            .await
+            .unwrap()
+    );
+    log::info!(
+        "writer wrote {} times",
+        awriter
+            .send(OutputMsg(String::from("world")))
+            .await
+            .unwrap()
+    );
+    log::info!(
+        "writer wrote {} times",
+        awriter.send(OutputMsg(String::from("!"))).await.unwrap()
+    );
+    agenerator.send(AddrMsg(awriter2)).await.unwrap();
+    log::info!(
+        "writer wrote {} times",
+        awriter
+            .send(OutputMsg(String::from("I'm alive")))
+            .await
+            .unwrap()
+    );
 
     drop(awriter);
     drop(agenerator);

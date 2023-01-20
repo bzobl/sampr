@@ -2,46 +2,66 @@ use crate::actor::Actor;
 
 use async_trait::async_trait;
 use std::fmt;
+use tokio::sync::oneshot;
 
-pub trait Message: Send + 'static {}
+pub trait Message: Send + 'static {
+    type Result: Send;
+}
 
 #[async_trait]
 pub trait Handler<M: Message> {
-    async fn handle(&mut self, msg: M);
+    async fn handle(&mut self, msg: M) -> M::Result;
 }
 
 #[async_trait]
-pub trait Unpackable<A: Actor> {
-    async fn handle_message(&mut self, actor: &mut A);
+pub trait Deliver<A: Actor> {
+    // Deliver a message to its actor.
+    //
+    // Please note that this should consume self, but cannot do so
+    // as the rust compiler cannot determine the size of [EnvelopeWithMessage]
+    // due to it hiding in a box behind this trait.
+    //
+    async fn deliver(&mut self, actor: &mut A);
 }
 
-struct InnerEnvelope<M>
+struct Inner<M>
+where
+    M: Message,
+{
+    msg: M,
+    result_tx: oneshot::Sender<M::Result>,
+}
+
+struct EnvelopeWithMessage<M>(Option<Inner<M>>)
+where
+    M: Message + Send;
+
+impl<M> EnvelopeWithMessage<M>
 where
     M: Message + Send,
 {
-    msg: Option<M>,
-}
-
-impl<M: Message + Send> InnerEnvelope<M> {
-    fn new(msg: M) -> Self {
-        InnerEnvelope { msg: Some(msg) }
+    fn new(msg: M, result_tx: oneshot::Sender<M::Result>) -> Self {
+        EnvelopeWithMessage(Some(Inner { msg, result_tx }))
     }
 }
 
 #[async_trait]
-impl<A, M> Unpackable<A> for InnerEnvelope<M>
+impl<A, M> Deliver<A> for EnvelopeWithMessage<M>
 where
     A: Actor + Handler<M>,
     M: Message,
 {
-    async fn handle_message(&mut self, actor: &mut A) {
-        let msg = self.msg.take().unwrap();
-        <A as Handler<M>>::handle(actor, msg).await
+    async fn deliver(&mut self, actor: &mut A) {
+        let Inner { msg, result_tx } = self.0.take().expect("envelope can only be delivered once");
+        let res = <A as Handler<M>>::handle(actor, msg).await;
+        if result_tx.send(res).is_err() {
+            log::error!("cannot send result to sender shut down");
+        }
     }
 }
 
 pub struct Envelope<A: Actor> {
-    msg: Box<dyn Unpackable<A> + Send>,
+    msg: Box<dyn Deliver<A> + Send>,
 }
 
 impl<A: Actor> fmt::Debug for Envelope<A> {
@@ -51,20 +71,20 @@ impl<A: Actor> fmt::Debug for Envelope<A> {
 }
 
 impl<A: Actor> Envelope<A> {
-    pub fn pack<M>(msg: M) -> Self
+    pub fn pack<M>(msg: M, result_tx: oneshot::Sender<M::Result>) -> Self
     where
         A: Handler<M>,
         M: Message + Send + 'static,
     {
         Envelope {
-            msg: Box::new(InnerEnvelope::new(msg)),
+            msg: Box::new(EnvelopeWithMessage::new(msg, result_tx)),
         }
     }
 }
 
 #[async_trait]
-impl<A: Actor> Unpackable<A> for Envelope<A> {
-    async fn handle_message(&mut self, actor: &mut A) {
-        self.msg.handle_message(actor).await
+impl<A: Actor> Deliver<A> for Envelope<A> {
+    async fn deliver(&mut self, actor: &mut A) {
+        self.msg.deliver(actor).await;
     }
 }

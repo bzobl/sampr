@@ -1,6 +1,6 @@
 use crate::{
     actor::Actor,
-    message::{Envelope, Unpackable},
+    message::{Deliver, Envelope},
 };
 
 use tokio::sync::{mpsc, oneshot};
@@ -35,7 +35,7 @@ impl<A: Actor> Context<A> {
                     break;
                 }
             };
-            envelope.handle_message(&mut self.actor).await;
+            envelope.deliver(&mut self.actor).await;
         }
     }
 }
