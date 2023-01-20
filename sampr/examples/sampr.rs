@@ -1,5 +1,4 @@
-use async_trait::async_trait;
-use sampr::{Actor, Addr, Handler, Message};
+use sampr::{async_trait, Actor, Addr, Error, Handler, Message};
 
 #[derive(Default)]
 struct Writer {

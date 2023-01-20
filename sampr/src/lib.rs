@@ -8,3 +8,5 @@ pub(crate) mod context;
 
 pub(crate) mod message;
 pub use message::{Handler, Message};
+
+pub use async_trait::async_trait;
