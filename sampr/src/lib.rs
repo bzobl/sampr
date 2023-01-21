@@ -5,6 +5,7 @@ mod error;
 pub use error::SamprError as Error;
 
 pub(crate) mod context;
+pub use context::{AsyncContext, Context};
 
 pub(crate) mod message;
 pub use message::{Handler, Message};

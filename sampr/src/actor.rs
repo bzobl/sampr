@@ -1,7 +1,7 @@
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    context::Context,
+    context::{AsyncContext, Context},
     message::{Envelope, Handler, Message},
     Error,
 };
@@ -53,15 +53,19 @@ impl<A: Actor> ActorHandle<A> {
 }
 
 pub trait Actor: Sized + Send + 'static {
+    type Context: AsyncContext;
+
     fn started(&mut self);
     fn stopped(&mut self);
 
-    fn start(self) -> ActorHandle<Self> {
+    fn start(self) -> ActorHandle<Self>
+    where
+        Self: Actor<Context = Context<Self>>,
+    {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let (msg_tx, msg_rx) = mpsc::channel(10);
 
-        let ctx = Context::new(self, msg_rx);
-        ctx.spawn(shutdown_tx);
+        Context::start(self, msg_rx, shutdown_tx);
 
         ActorHandle {
             shutdown_rx,

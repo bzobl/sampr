@@ -1,4 +1,4 @@
-use sampr::{async_trait, Actor, Addr, Error, Handler, Message};
+use sampr::{async_trait, Actor, Addr, Context, Error, Handler, Message};
 
 #[derive(Default)]
 struct Writer {
@@ -6,6 +6,8 @@ struct Writer {
 }
 
 impl Actor for Writer {
+    type Context = Context<Self>;
+
     fn started(&mut self) {
         log::info!("Writer has started");
     }
@@ -16,7 +18,7 @@ impl Actor for Writer {
 
 #[async_trait]
 impl Handler<OutputMsg> for Writer {
-    async fn handle(&mut self, msg: OutputMsg) -> u32 {
+    async fn handle(&mut self, msg: OutputMsg, _ctx: &mut Context<Self>) -> u32 {
         log::info!("writer says (count={}): {}", self.count, msg.0);
         self.count += 1;
         self.count
@@ -26,6 +28,8 @@ impl Handler<OutputMsg> for Writer {
 struct Generator;
 
 impl Actor for Generator {
+    type Context = Context<Self>;
+
     fn started(&mut self) {
         log::info!("Generator has started");
     }
@@ -37,7 +41,18 @@ impl Actor for Generator {
 
 #[async_trait]
 impl Handler<AddrMsg> for Generator {
-    async fn handle(&mut self, msg: AddrMsg) -> Result<(), Error> {
+    async fn handle(&mut self, msg: AddrMsg, ctx: &mut Context<Self>) -> Result<(), Error> {
+        log::info!("got AddrMsg");
+
+        ctx.spawn(
+            async move {
+                log::info!("SLEEPING");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                log::info!("SLEEPING DONE");
+            },
+            |_, _| log::info!("SLEEP HAS ENDED"),
+        );
+
         log::info!("send ping");
         if let Err(e) = msg.0.send(OutputMsg(String::from("PING"))).await {
             Err(e)
