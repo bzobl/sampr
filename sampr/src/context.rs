@@ -3,29 +3,15 @@ use crate::{
     message::{Deliver, Envelope},
 };
 
+use async_trait::async_trait;
 use futures::{stream::FuturesUnordered, StreamExt};
 use std::{future::Future, pin::Pin};
 use tokio::sync::{mpsc, oneshot};
 
 pub trait AsyncContext: Send {}
 
-struct SpawnedCallback<A: Actor> {
-    callback: Box<dyn FnOnce(&mut A, &mut A::Context) + Send>,
-}
-
-impl<A: Actor> SpawnedCallback<A> {
-    fn call(self, actor: &mut A, ctx: &mut A::Context) {
-        (self.callback)(actor, ctx)
-    }
-}
-
-struct Item<A: Actor> {
-    future: Pin<Box<dyn Future<Output = ()> + Send>>,
-    callback: SpawnedCallback<A>,
-}
-
 pub struct Context<A: Actor> {
-    spawned: Vec<Item<A>>,
+    spawned: Vec<Box<dyn AsyncItem<A>>>,
 }
 
 impl<A> Context<A>
@@ -51,21 +37,57 @@ where
             }
         });
     }
-    pub fn spawn<F, C>(&mut self, future: F, callback: C)
+    pub fn spawn<F, C, O>(&mut self, future: F, callback: C)
     where
-        F: Future<Output = ()> + Send + 'static,
-        C: FnOnce(&mut A, &mut Self) + Send + 'static,
+        F: Future<Output = O> + Send + 'static,
+        C: FnOnce(O, &mut A, &mut Self) + Send + 'static,
+        O: Send + 'static,
     {
-        self.spawned.push(Item {
-            future: Box::pin(future),
-            callback: SpawnedCallback {
-                callback: Box::new(callback),
-            },
-        });
+        self.spawned.push(Box::new(Item {
+            future: Some(Box::pin(future)),
+            callback: Some(Box::new(callback)),
+        }));
     }
 }
 
 impl<A> AsyncContext for Context<A> where A: Actor<Context = Self> {}
+
+#[async_trait]
+trait AsyncItem<A: Actor>: Send {
+    async fn work(&mut self) -> Box<dyn AsyncCallback<A>>;
+}
+
+struct Item<A: Actor, O: Send + 'static> {
+    future: Option<Pin<Box<dyn Future<Output = O> + Send>>>,
+    callback: Option<Box<dyn FnOnce(O, &mut A, &mut A::Context) + Send>>,
+}
+
+#[async_trait]
+impl<A: Actor, O: Send + 'static> AsyncItem<A> for Item<A, O> {
+    async fn work(&mut self) -> Box<dyn AsyncCallback<A>> {
+        let result = self.future.take().unwrap().await;
+        Box::new(SpawnedCallback {
+            result: Some(result),
+            callback: Some(self.callback.take().unwrap()),
+        })
+    }
+}
+
+trait AsyncCallback<A: Actor>: Send {
+    fn call(&mut self, actor: &mut A, ctx: &mut A::Context);
+}
+
+struct SpawnedCallback<A: Actor, O: Send + 'static> {
+    result: Option<O>,
+    callback: Option<Box<dyn FnOnce(O, &mut A, &mut A::Context) + Send>>,
+}
+
+impl<A: Actor, O: Send + 'static> AsyncCallback<A> for SpawnedCallback<A, O> {
+    fn call(&mut self, actor: &mut A, ctx: &mut A::Context) {
+        let callback = self.callback.take().unwrap();
+        (callback)(self.result.take().unwrap(), actor, ctx)
+    }
+}
 
 struct Worker<A: Actor> {
     ctx: A::Context,
@@ -87,7 +109,7 @@ where
 
             tokio::select! {
                 res = spawned.next(), if !spawned.is_empty() => {
-                    let callback: SpawnedCallback<A> = match res {
+                    let mut callback: Box<dyn AsyncCallback<A>> = match res {
                         Some(cb) => cb,
                         None => unreachable!("is only polled when not empty"),
                     };
@@ -98,11 +120,10 @@ where
                         Some(mut envelope) => {
                             envelope.deliver(&mut self.actor, &mut self.ctx).await;
                             if !self.ctx.spawned.is_empty() {
-                                for item in self.ctx.spawned.drain(..) {
+                                for mut item in self.ctx.spawned.drain(..) {
                                     spawned.push(async move {
-                                        item.future.await;
-                                        item.callback
-                                    })
+                                        item.work().await
+                                    });
                                 }
                             }
                         }

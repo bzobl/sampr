@@ -25,7 +25,8 @@ impl Handler<OutputMsg> for Writer {
     }
 }
 
-struct Generator;
+#[derive(Default)]
+struct Generator(Option<String>);
 
 impl Actor for Generator {
     type Context = Context<Self>;
@@ -35,7 +36,7 @@ impl Actor for Generator {
     }
 
     fn stopped(&mut self) {
-        log::info!("Generator has stopped");
+        log::info!("Generator has stopped: {:?}", self.0);
     }
 }
 
@@ -49,8 +50,13 @@ impl Handler<AddrMsg> for Generator {
                 log::info!("SLEEPING");
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 log::info!("SLEEPING DONE");
+
+                "this is a str slice"
             },
-            |_, _| log::info!("SLEEP HAS ENDED"),
+            |result, actor, _ctx| {
+                log::info!("SLEEP HAS ENDED: result is '{result}'");
+                actor.0 = Some(result.to_string());
+            },
         );
 
         log::info!("send ping");
@@ -78,7 +84,7 @@ async fn main() {
 
     log::info!("hello world");
 
-    let generator = Generator.start();
+    let generator = Generator::default().start();
     let writer = Writer::default().start();
 
     let awriter = writer.address();
