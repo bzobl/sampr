@@ -53,9 +53,13 @@ impl Handler<AddrMsg> for Generator {
 
                 "this is a str slice"
             },
-            |result, actor, _ctx| {
+            |result, actor, ctx| {
                 log::info!("SLEEP HAS ENDED: result is '{result}'");
                 actor.0 = Some(result.to_string());
+
+                ctx.spawn(async move {}, |_, act, _| {
+                    act.0 = Some(String::from("second spawn"))
+                });
             },
         );
 

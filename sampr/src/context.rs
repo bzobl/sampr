@@ -119,16 +119,15 @@ where
                     match res {
                         Some(mut envelope) => {
                             envelope.deliver(&mut self.actor, &mut self.ctx).await;
-                            if !self.ctx.spawned.is_empty() {
-                                for mut item in self.ctx.spawned.drain(..) {
-                                    spawned.push(async move {
-                                        item.work().await
-                                    });
-                                }
-                            }
                         }
                         None => mailbox_closed = true,
                     };
+                }
+            }
+
+            if !self.ctx.spawned.is_empty() {
+                for mut item in self.ctx.spawned.drain(..) {
+                    spawned.push(async move { item.work().await });
                 }
             }
 
