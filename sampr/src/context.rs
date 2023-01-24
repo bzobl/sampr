@@ -37,6 +37,7 @@ where
             }
         });
     }
+
     pub fn spawn<F, C, O>(&mut self, future: F, callback: C)
     where
         F: Future<Output = O> + Send + 'static,

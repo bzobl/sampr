@@ -122,12 +122,9 @@ async fn main() {
             .unwrap()
     );
 
-    drop(awriter);
-    drop(agenerator);
-
     log::info!("all messages sent, waiting for shutdown");
-    generator.wait_for_shutdown().await;
-    writer.wait_for_shutdown().await;
+
+    tokio::signal::ctrl_c().await.unwrap();
 
     log::info!("bye world");
 }
