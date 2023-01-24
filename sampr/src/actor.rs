@@ -32,7 +32,7 @@ impl<A: Actor> Addr<A> {
     pub async fn send<M>(&self, msg: M) -> Result<M::Result, Error>
     where
         A: Handler<M>,
-        M: Message + Send,
+        M: Message + 'static,
     {
         let (result_tx, result_rx) = oneshot::channel();
         self.msg_tx

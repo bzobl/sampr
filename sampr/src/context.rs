@@ -50,7 +50,7 @@ trait AsyncItem<A: Actor>: Send {
     async fn work(&mut self) -> Box<dyn AsyncCallback<A>>;
 }
 
-struct Item<A: Actor, O: Send + 'static> {
+struct Item<A: Actor, O: Send> {
     future: Option<Pin<Box<dyn Future<Output = O> + Send>>>,
     callback: Option<Box<dyn FnOnce(O, &mut A, &mut A::Context) + Send>>,
 }
@@ -70,12 +70,12 @@ trait AsyncCallback<A: Actor>: Send {
     fn call(&mut self, actor: &mut A, ctx: &mut A::Context);
 }
 
-struct SpawnedCallback<A: Actor, O: Send + 'static> {
+struct SpawnedCallback<A: Actor, O: Send> {
     result: Option<O>,
     callback: Option<Box<dyn FnOnce(O, &mut A, &mut A::Context) + Send>>,
 }
 
-impl<A: Actor, O: Send + 'static> AsyncCallback<A> for SpawnedCallback<A, O> {
+impl<A: Actor, O: Send> AsyncCallback<A> for SpawnedCallback<A, O> {
     fn call(&mut self, actor: &mut A, ctx: &mut A::Context) {
         let callback = self.callback.take().unwrap();
         (callback)(self.result.take().unwrap(), actor, ctx)
