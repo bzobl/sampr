@@ -6,7 +6,7 @@ async/await language feature to deal with futures.
 
 ## Overview
 
-_Actors_ are defined by implementing the _Actor_ trait for an arbitrary
+_Actors_ are defined by implementing the `Actor` trait for an arbitrary
 type.  An `Actor` can receive and process messages by implementing the
 `Handler<M>` trait for that specific message. When started, each `Actor`
 runs asynchronously as part of its `Context` in a separate
