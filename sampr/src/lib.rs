@@ -1,5 +1,5 @@
 pub(crate) mod actor;
-pub use actor::{Actor, ActorHandle, Addr};
+pub use actor::{Actor, Addr};
 
 mod error;
 pub use error::SamprError as Error;

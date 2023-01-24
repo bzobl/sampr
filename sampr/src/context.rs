@@ -6,7 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::{stream::FuturesUnordered, StreamExt};
 use std::{future::Future, pin::Pin};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 pub trait AsyncContext: Send {}
 
@@ -18,11 +18,7 @@ impl<A> Context<A>
 where
     A: Actor<Context = Self>,
 {
-    pub(crate) fn start(
-        actor: A,
-        msg_rx: mpsc::Receiver<Envelope<A>>,
-        shutdown_tx: oneshot::Sender<()>,
-    ) {
+    pub(crate) fn start(actor: A, msg_rx: mpsc::Receiver<Envelope<A>>) {
         tokio::task::spawn(async move {
             let mut worker = Worker {
                 ctx: Context { spawned: vec![] },
@@ -31,10 +27,6 @@ where
             };
 
             worker.run().await;
-
-            if let Err(_e) = shutdown_tx.send(()) {
-                log::debug!("user dropped ActorHandle early");
-            }
         });
     }
 

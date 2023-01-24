@@ -91,32 +91,24 @@ async fn main() {
     let generator = Generator::default().start();
     let writer = Writer::default().start();
 
-    let awriter = writer.address();
-    let awriter2: Addr<Writer> = awriter.clone();
-    let agenerator = generator.address();
+    let awriter2: Addr<Writer> = writer.clone();
 
     log::info!(
         "writer wrote {} times",
-        awriter
-            .send(OutputMsg(String::from("hello")))
-            .await
-            .unwrap()
+        writer.send(OutputMsg(String::from("hello"))).await.unwrap()
     );
     log::info!(
         "writer wrote {} times",
-        awriter
-            .send(OutputMsg(String::from("world")))
-            .await
-            .unwrap()
+        writer.send(OutputMsg(String::from("world"))).await.unwrap()
     );
     log::info!(
         "writer wrote {} times",
-        awriter.send(OutputMsg(String::from("!"))).await.unwrap()
+        writer.send(OutputMsg(String::from("!"))).await.unwrap()
     );
-    agenerator.send(AddrMsg(awriter2)).await.unwrap().unwrap();
+    generator.send(AddrMsg(awriter2)).await.unwrap().unwrap();
     log::info!(
         "writer wrote {} times",
-        awriter
+        writer
             .send(OutputMsg(String::from("I'm alive")))
             .await
             .unwrap()
