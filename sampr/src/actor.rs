@@ -55,9 +55,9 @@ impl<A: Actor> ActorHandle<A> {
 pub trait Actor: Sized + Send + 'static {
     type Context: AsyncContext;
 
-    fn started(&mut self);
-    fn stopped(&mut self);
+    fn started(&mut self, _ctx: &mut Self::Context) {}
 
+    fn stopped(&mut self) {}
     fn start(self) -> ActorHandle<Self>
     where
         Self: Actor<Context = Context<Self>>,

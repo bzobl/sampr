@@ -8,7 +8,7 @@ struct Writer {
 impl Actor for Writer {
     type Context = Context<Self>;
 
-    fn started(&mut self) {
+    fn started(&mut self, _ctx: &mut Context<Self>) {
         log::info!("Writer has started");
     }
     fn stopped(&mut self) {
@@ -31,7 +31,7 @@ struct Generator(Option<String>);
 impl Actor for Generator {
     type Context = Context<Self>;
 
-    fn started(&mut self) {
+    fn started(&mut self, _ctx: &mut Context<Self>) {
         log::info!("Generator has started");
     }
 

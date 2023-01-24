@@ -101,7 +101,7 @@ where
     A: Actor<Context = Context<A>>,
 {
     async fn run(&mut self) {
-        self.actor.started();
+        self.actor.started(&mut self.ctx);
 
         let mut spawned = FuturesUnordered::new();
 
