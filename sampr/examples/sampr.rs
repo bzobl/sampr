@@ -1,5 +1,8 @@
 use sampr::{async_trait, Actor, Addr, Context, Error, Handler, Message};
 
+use std::time::Duration;
+use tokio::time::sleep;
+
 #[derive(Default)]
 struct Writer {
     count: u32,
@@ -31,8 +34,17 @@ struct Generator(Option<String>);
 impl Actor for Generator {
     type Context = Context<Self>;
 
-    fn started(&mut self, _ctx: &mut Context<Self>) {
+    fn started(&mut self, ctx: &mut Context<Self>) {
         log::info!("Generator has started");
+        ctx.spawn(
+            async {
+                for i in 0..10 {
+                    log::info!("Generator sleep #{i}");
+                    sleep(Duration::from_secs(1)).await;
+                }
+            },
+            |_, _, _| log::info!("Generator's sleep tasks is done"),
+        )
     }
 
     fn stopped(&mut self) {
@@ -48,7 +60,7 @@ impl Handler<AddrMsg> for Generator {
         ctx.spawn(
             async move {
                 log::info!("SLEEPING");
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                sleep(Duration::from_secs(1)).await;
                 log::info!("SLEEPING DONE");
 
                 "this is a str slice"
@@ -63,6 +75,8 @@ impl Handler<AddrMsg> for Generator {
             },
         );
 
+        log::info!("waiting for 5 seconds before sending Ping");
+        sleep(Duration::from_secs(5)).await;
         log::info!("send ping");
         if let Err(e) = msg.0.send(OutputMsg(String::from("PING"))).await {
             Err(e)

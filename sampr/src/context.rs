@@ -4,7 +4,7 @@ use crate::{
 };
 
 use async_trait::async_trait;
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use std::{future::Future, pin::Pin};
 use tokio::sync::mpsc;
 
@@ -82,6 +82,11 @@ impl<A: Actor, O: Send> AsyncCallback<A> for SpawnedCallback<A, O> {
     }
 }
 
+enum Work<A: Actor> {
+    Message(Envelope<A>),
+    Callback(Box<dyn AsyncCallback<A>>),
+}
+
 struct Worker<A: Actor> {
     ctx: A::Context,
     actor: A,
@@ -93,39 +98,65 @@ where
     A: Actor<Context = Context<A>>,
 {
     async fn run(&mut self) {
-        self.actor.started(&mut self.ctx);
-
         let mut spawned = FuturesUnordered::new();
 
+        self.actor.started(&mut self.ctx);
+        for mut item in self.ctx.spawned.drain(..) {
+            spawned.push(async move { item.work().await }.boxed());
+        }
+
+        let mut mailbox_closed = false;
         loop {
-            let mut mailbox_closed = false;
-
-            tokio::select! {
-                res = spawned.next(), if !spawned.is_empty() => {
-                    let mut callback: Box<dyn AsyncCallback<A>> = match res {
-                        Some(cb) => cb,
-                        None => unreachable!("is only polled when not empty"),
-                    };
-                    callback.call(&mut self.actor, &mut self.ctx);
-                },
-                res = self.msg_rx.recv() => {
-                    match res {
-                        Some(mut envelope) => {
-                            envelope.deliver(&mut self.actor, &mut self.ctx).await;
-                        }
-                        None => mailbox_closed = true,
-                    };
-                }
-            }
-
-            if !self.ctx.spawned.is_empty() {
-                for mut item in self.ctx.spawned.drain(..) {
-                    spawned.push(async move { item.work().await });
-                }
-            }
-
             if mailbox_closed && spawned.is_empty() {
                 break;
+            }
+
+            let work = tokio::select! {
+                res = spawned.next(), if !spawned.is_empty() => {
+                    Work::Callback(res.expect("is only polled when not empty"))
+                },
+                res = self.msg_rx.recv(), if !mailbox_closed => {
+                    match res {
+                        Some(envelope) => {
+                            Work::Message(envelope)
+                        }
+                        None => {
+                            mailbox_closed = true;
+                            continue;
+                        },
+                    }
+                }
+            };
+
+            let mut envelope = match work {
+                Work::Callback(mut callback) => {
+                    // TODO: should maybe be async
+                    callback.call(&mut self.actor, &mut self.ctx);
+                    for mut item in self.ctx.spawned.drain(..) {
+                        spawned.push(async move { item.work().await }.boxed());
+                    }
+                    continue;
+                }
+                Work::Message(envelope) => envelope,
+            };
+
+            loop {
+                tokio::select! {
+                    res = spawned.next(), if !spawned.is_empty() => {
+                        res.expect("is only polled when not empty")
+                            .call(&mut self.actor, &mut self.ctx);
+                        for mut item in self.ctx.spawned.drain(..) {
+                            spawned.push(async move { item.work().await }.boxed());
+                        }
+                        continue;
+                    },
+                    _ = envelope.deliver(&mut self.actor, &mut self.ctx) => {
+                        for mut item in self.ctx.spawned.drain(..) {
+                            spawned.push(async move { item.work().await }.boxed());
+                        }
+                        break;
+                    }
+                }
             }
         }
 

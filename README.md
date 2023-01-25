@@ -21,11 +21,6 @@ functions in traits, _sampr_ currently relies on
 - Sending messages between actors and wait for its result.
 - Spawning futures into an actor's context and waiting for it to resolve.
 
-## Known bugs
-
-- While waiting for `Handler<M>::handle()`'s completion, no spawned
-  tasks are polled.
-
 ## Missing features
 
 - Sending messages between actors without blocking the sender's
