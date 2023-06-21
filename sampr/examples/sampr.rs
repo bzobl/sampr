@@ -1,5 +1,6 @@
 use sampr::{async_trait, Actor, Addr, Context, Error, Handler, Message};
 
+use futures::stream;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -11,9 +12,14 @@ struct Writer {
 impl Actor for Writer {
     type Context = Context<Self>;
 
-    fn started(&mut self, _ctx: &mut Context<Self>) {
+    fn started(&mut self, ctx: &mut Context<Self>) {
         log::info!("Writer has started");
+        let v: Vec<StreamMsg> = vec!["I".into(), "have".into(), "a".into(), "stream".into()];
+        let stream = stream::iter(v);
+
+        ctx.add_stream(stream);
     }
+
     fn stopped(&mut self) {
         log::info!("Writer has stopped. Sent {} messages in total", self.count);
     }
@@ -25,6 +31,17 @@ impl Handler<OutputMsg> for Writer {
         log::info!("writer says (count={}): {}", self.count, msg.0);
         self.count += 1;
         self.count
+    }
+}
+
+#[async_trait]
+impl Handler<Option<StreamMsg>> for Writer {
+    async fn handle(&mut self, msg: Option<StreamMsg>, _ctx: &mut Context<Self>) {
+        if let Some(StreamMsg(msg)) = msg {
+            log::info!("writer got a String: {}", msg);
+        } else {
+            log::info!("and now my stream has ended");
+        }
     }
 }
 
@@ -96,6 +113,17 @@ impl Message for AddrMsg {
     type Result = Result<(), Error>;
 }
 
+struct StreamMsg(String);
+impl Message for StreamMsg {
+    type Result = ();
+}
+
+impl From<&str> for StreamMsg {
+    fn from(msg: &str) -> Self {
+        StreamMsg(msg.into())
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     env_logger::init();
@@ -130,6 +158,8 @@ async fn main() {
 
     log::info!("all messages sent, waiting for shutdown");
 
+    drop(writer);
+    drop(generator);
     tokio::signal::ctrl_c().await.unwrap();
 
     log::info!("bye world");

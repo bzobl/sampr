@@ -8,6 +8,13 @@ pub trait Message: Send {
     type Result: Send;
 }
 
+impl<T> Message for Option<T>
+where
+    T: Message,
+{
+    type Result = T::Result;
+}
+
 #[async_trait]
 pub trait Handler<M: Message>
 where

@@ -41,6 +41,18 @@ impl<A: Actor> Addr<A> {
             .map_err(|_| Error::ReceiverShutdown)?;
         Ok(result_rx.await.map_err(|_| Error::ReceiverShutdown)?)
     }
+
+    pub(crate) async fn send_nowait<M>(&self, msg: M) -> Result<(), Error>
+    where
+        A: Handler<M>,
+        M: Message + 'static,
+    {
+        let (result_tx, _result_rx) = oneshot::channel();
+        self.msg_tx
+            .send(Envelope::pack(msg, result_tx))
+            .await
+            .map_err(|_| Error::ReceiverShutdown)
+    }
 }
 
 /// An asynchronous actor.
@@ -95,8 +107,11 @@ pub trait Actor: Sized + Send + 'static {
     {
         let (msg_tx, msg_rx) = mpsc::channel(10);
 
-        Context::start(self, msg_rx);
+        let addr = Addr { msg_tx };
 
-        Addr { msg_tx }
+        // TODO by cloning msg_tx into Context, the actor will not stop automatically
+        Context::start(self, addr.clone(), msg_rx);
+
+        addr
     }
 }
