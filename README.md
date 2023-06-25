@@ -18,13 +18,14 @@ functions in traits, _sampr_ currently relies on
 
 ## Current features
 
-- Sending messages between actors and wait for its result.
+- Sending messages between actors and wait for their result.
 - Spawning futures into an actor's context and waiting for it to resolve.
+- Adding `Stream`s into an actor's context and waiting for it to produce items.
+- Stopping an actor, moving the object back to the caller.
 
 ## Missing features
 
 - Sending messages between actors without blocking the sender's
   `Context`, i.e., an `.send()` function taking a callback (this can be
   achieved already by spawning a task, but needs some syntactic sugar).
-- Registering [`Stream`s](https://docs.rs/tokio-stream/latest/tokio_stream/) for an actor.
-- Spawning tasks into an `Actor`'s context might need/want to take an async callback.
+- Timers for doing work periodically.
