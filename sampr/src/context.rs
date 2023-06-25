@@ -40,7 +40,7 @@ where
         });
     }
 
-    fn drain_futures(&mut self, async_items: &mut SelectAll<Box<dyn ActorTask<A>>>) {
+    fn drain_tasks(&mut self, async_items: &mut SelectAll<Box<dyn ActorTask<A>>>) {
         for item in self.tasks.drain(..) {
             async_items.push(item);
         }
@@ -232,7 +232,7 @@ where
                 break;
             }
 
-            self.ctx.drain_futures(&mut async_items);
+            self.ctx.drain_tasks(&mut async_items);
 
             let mut envelope = tokio::select! {
                 res = async_items.next(), if !async_items.is_empty() => {
@@ -255,20 +255,22 @@ where
                 }
             };
 
+            // This is split in two loops as an Actor can only process
+            // on Message at a time). Therefore, msg_rx is not polled while
+            // delivering a message. Nevertheless, all async_items have
+            // to be polled, hence the duplication.
             loop {
+                self.ctx.drain_tasks(&mut async_items);
+
                 tokio::select! {
                     res = async_items.next(), if !async_items.is_empty() => {
                         if let Some(mut task_output) = res {
                             task_output.call(&mut self.actor, &mut self.ctx).await;
-                            self.ctx.drain_futures(&mut async_items);
-                            continue;
                         } else {
                             log::warn!("some stream finished in inner loop?");
                         }
                     },
-                    // is msg_rx missing here on purpose?
                     _ = envelope.deliver(&mut self.actor, &mut self.ctx) => {
-                        self.ctx.drain_futures(&mut async_items);
                         break;
                     }
                 }
