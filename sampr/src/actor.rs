@@ -1,10 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{
-    context::Context,
-    message::{Envelope, Handler, Message},
-    Error,
-};
+use crate::{message::Envelope, Context, Error, Handler, Message};
 
 /// Address of an actor.
 #[derive(Debug)]
@@ -36,20 +32,19 @@ impl<A: Actor> Addr<A> {
     {
         let (result_tx, result_rx) = oneshot::channel();
         self.msg_tx
-            .send(Envelope::pack(msg, result_tx))
+            .send(Envelope::message_rsvp(msg, result_tx))
             .await
             .map_err(|_| Error::ReceiverShutdown)?;
         Ok(result_rx.await.map_err(|_| Error::ReceiverShutdown)?)
     }
 
-    pub(crate) async fn send_nowait<M>(&self, msg: M) -> Result<(), Error>
+    pub(crate) async fn send_and_forget<M>(&self, msg: M) -> Result<(), Error>
     where
         A: Handler<M>,
         M: Message + 'static,
     {
-        let (result_tx, _result_rx) = oneshot::channel();
         self.msg_tx
-            .send(Envelope::pack(msg, result_tx))
+            .send(Envelope::message(msg))
             .await
             .map_err(|_| Error::ReceiverShutdown)
     }

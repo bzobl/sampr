@@ -44,18 +44,41 @@
 //! }
 //! ```
 //!
+//! Apart from messages, the actor's task can, through [Context], be augmented with streams and
+//! futures to do work asynchronously and callback the [Actor] once work is done or new elements
+//! are yielded from the stream.
+//!
+//! The lifetime of an actor could look like the following:
+//!
+//! ```
+//! # struct MyMessage(u8);
+//! # impl sampr::Message for MyMessage { type Result = bool; }
+//! # struct MyActor;
+//! # impl sampr::Actor for MyActor {}
+//! async fn main() {
+//!   let actor = MyActor;
+//!   let addr = actor.start();
+//!
+//!   assert!(addr.send(MyMessage(0)).unwrap());
+//!
+//!   let actor = addr.stop();
+//! }
+//! ```
+//!
 //! [1]: https://actix.rs
 
-pub(crate) mod actor;
+#![deny(missing_docs)]
+
+mod actor;
 pub use actor::{Actor, Addr};
 
 mod error;
-pub use error::SamprError as Error;
+pub use error::Error;
 
-pub(crate) mod context;
+mod context;
 pub use context::Context;
 
-pub(crate) mod message;
+mod message;
 pub use message::{Handler, Message};
 
 #[doc(no_inline)]

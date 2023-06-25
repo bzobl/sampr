@@ -1,8 +1,3 @@
-use crate::{
-    actor::{Actor, Addr},
-    message::{Envelope, Handler, Message},
-};
-
 use async_trait::async_trait;
 use futures::{
     ready,
@@ -13,6 +8,9 @@ use futures::{
 use std::pin::Pin;
 use tokio::sync::mpsc;
 
+use crate::{message::Envelope, Actor, Addr, Handler, Message};
+
+/// Context for interacting with an [Actor's](Actor) task.
 pub struct Context<A: Actor> {
     addr: Addr<A>,
     tasks: Vec<Box<dyn ActorTask<A>>>,
@@ -22,8 +20,10 @@ impl<A> Context<A>
 where
     A: Actor,
 {
+    /// Start an actor, moving it into its own `tokio::task`.
+    ///
+    /// The caller can move the [Actor] back to their task using [Addr::stop()].
     pub(crate) fn start(actor: A, addr: Addr<A>, msg_rx: mpsc::Receiver<Envelope<A>>) {
-        // TODO maybe pass the join handle back to the user
         tokio::task::spawn(async move {
             let worker = Worker {
                 ctx: Context {
@@ -44,6 +44,8 @@ where
         }
     }
 
+    /// Spawn a future to be worked on in the background. Once `future` resolves `callback` will be
+    /// called with the [Actor] and its [Context] as parameters.
     pub fn spawn<F, C, O>(&mut self, future: F, callback: C)
     where
         F: Future<Output = O> + Send + 'static,
@@ -56,6 +58,8 @@ where
         }));
     }
 
+    /// Add a stream to be polled to the [Actor's](Actor) [Context]. Every time `stream` produces
+    /// an item the [Actor's](Actor) [Handler<Option<_>>] implementation is called.
     pub fn add_stream<S>(&mut self, stream: S)
     where
         S: Stream + Send + Unpin + 'static,
@@ -63,7 +67,7 @@ where
         A: Handler<Option<<S as Stream>::Item>>,
     {
         self.tasks.push(Box::new(ActorStream {
-            stream,
+            stream: Some(stream),
             addr: self.addr.clone(),
         }));
     }
@@ -153,7 +157,7 @@ where
     S: Stream + Send + Unpin + 'static,
     S::Item: Message,
 {
-    stream: S,
+    stream: Option<S>,
     addr: Addr<A>,
 }
 
@@ -176,17 +180,24 @@ where
     type Item = Box<dyn TaskOutput<A>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut s = self.as_mut();
-        let item = ready!(s.stream.poll_next_unpin(cx));
-        if item.is_some() {
-            Poll::Ready(Some(Box::new(StreamOutput {
-                item,
-                addr: self.addr.clone(),
-            })))
-        } else {
-            // TODO: Actor will never be notified about end of stream
-            Poll::Ready(None)
+        if self.stream.is_none() {
+            return Poll::Ready(None);
         }
+
+        let mut s = self.as_mut();
+        let item = ready!(s
+            .stream
+            .as_mut()
+            .expect("checked above")
+            .poll_next_unpin(cx));
+        if item.is_none() {
+            s.stream = None;
+        }
+
+        Poll::Ready(Some(Box::new(StreamOutput {
+            item,
+            addr: self.addr.clone(),
+        })))
     }
 }
 
@@ -200,9 +211,8 @@ impl<A: Actor + Handler<Option<O>>, O: Send + Message + 'static> TaskOutput<A>
     for StreamOutput<A, O>
 {
     async fn call(&mut self, _actor: &mut A, _ctx: &mut Context<A>) {
-        // TODO let Envelope take the oneshot optionally.
-        if let Err(e) = self.addr.send_nowait(self.item.take()).await {
-            log::warn!("Oh noes, no sendy send {e}");
+        if let Err(e) = self.addr.send_and_forget(self.item.take()).await {
+            log::warn!("discarding item from stream: {e}");
         }
     }
 }
