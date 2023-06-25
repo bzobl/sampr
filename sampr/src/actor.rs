@@ -1,7 +1,7 @@
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    context::{AsyncContext, Context},
+    context::Context,
     message::{Envelope, Handler, Message},
     Error,
 };
@@ -80,7 +80,7 @@ impl<A: Actor> Addr<A> {
 /// The application should then use messages to interact with this actor. Messages can be sent
 /// using this actor's [Addr]. Access to the actor while processing those messages will be granted
 /// through a mutable reference in the respective handler functions and callbacks. Additionally,
-/// those will have a reference to the actor's [AsyncContext] at hand to interact with the actor
+/// those will have a reference to the actor's [Context] at hand to interact with the actor
 /// and the actor's [tokio::task].
 ///
 /// # Example
@@ -88,20 +88,13 @@ impl<A: Actor> Addr<A> {
 /// ```
 /// struct MyActor;
 ///
-/// impl sampr::Actor for MyActor{
-///   type Context = sampr::Context<Self>;
-/// }
+/// impl sampr::Actor for MyActor {}
 /// ```
 pub trait Actor: Sized + Send + 'static {
-    /// The actor's context.
-    ///
-    /// Usually, an implementer will use [`Context<Self>`](Context) as its Context type.
-    type Context: AsyncContext;
-
     /// Called in the context of the actor's `tokio::task` when the actor is started .
     ///
     /// The default implementation of this function does nothing.
-    fn started(&mut self, _ctx: &mut Self::Context) {}
+    fn started(&mut self, _ctx: &mut Context<Self>) {}
 
     /// Called in the context of the actor's `tokio::task` when the actor is stopped.
     ///
@@ -117,10 +110,7 @@ pub trait Actor: Sized + Send + 'static {
     /// currently limited to 10 messages. This, however, is not a limiting factor as sending a
     /// message through [Addr::send()] will await the message's result anyways, hence the sending
     /// actor will wait regardless of whether the receiver's message queue has reached its capacity.
-    fn start(self) -> Addr<Self>
-    where
-        Self: Actor<Context = Context<Self>>,
-    {
+    fn start(self) -> Addr<Self> {
         let (msg_tx, msg_rx) = mpsc::channel(10);
 
         let addr = Addr { msg_tx };

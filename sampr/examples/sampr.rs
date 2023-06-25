@@ -10,8 +10,6 @@ struct Writer {
 }
 
 impl Actor for Writer {
-    type Context = Context<Self>;
-
     fn started(&mut self, ctx: &mut Context<Self>) {
         log::info!("Writer has started");
         let v: Vec<StreamMsg> = vec!["I".into(), "have".into(), "a".into(), "stream".into()];
@@ -49,8 +47,6 @@ impl Handler<Option<StreamMsg>> for Writer {
 struct Generator(Option<String>);
 
 impl Actor for Generator {
-    type Context = Context<Self>;
-
     fn started(&mut self, ctx: &mut Context<Self>) {
         log::info!("Generator has started");
         ctx.spawn(

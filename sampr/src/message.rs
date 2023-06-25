@@ -1,4 +1,4 @@
-use crate::actor::Actor;
+use crate::{actor::Actor, context::Context};
 
 use async_trait::async_trait;
 use std::fmt;
@@ -20,7 +20,7 @@ pub trait Handler<M: Message>
 where
     Self: Actor,
 {
-    async fn handle(&mut self, msg: M, ctx: &mut <Self as Actor>::Context) -> M::Result;
+    async fn handle(&mut self, msg: M, ctx: &mut Context<Self>) -> M::Result;
 }
 
 #[async_trait]
@@ -31,7 +31,7 @@ pub trait Deliver<A: Actor> {
     // as the rust compiler cannot determine the size of [EnvelopeWithMessage]
     // due to it hiding in a box behind this trait.
     //
-    async fn deliver(&mut self, actor: &mut A, ctx: &mut A::Context);
+    async fn deliver(&mut self, actor: &mut A, ctx: &mut Context<A>);
 }
 
 struct Inner<M>
@@ -61,7 +61,7 @@ where
     A: Actor + Handler<M>,
     M: Message,
 {
-    async fn deliver(&mut self, actor: &mut A, ctx: &mut A::Context) {
+    async fn deliver(&mut self, actor: &mut A, ctx: &mut Context<A>) {
         let Inner { msg, result_tx } = self.0.take().expect("envelope can only be delivered once");
         let res = <A as Handler<M>>::handle(actor, msg, ctx).await;
         if result_tx.send(res).is_err() {
@@ -98,7 +98,7 @@ impl<A: Actor> Envelope<A> {
         Envelope::Stop(result_tx)
     }
 
-    pub async fn deliver(&mut self, actor: &mut A, ctx: &mut A::Context) {
+    pub async fn deliver(&mut self, actor: &mut A, ctx: &mut Context<A>) {
         use Envelope::*;
         match self {
             Message(msg) => msg.deliver(actor, ctx).await,

@@ -13,9 +13,7 @@
 //! ```
 //! struct MyActor;
 //!
-//! impl sampr::Actor for MyActor{
-//!   type Context = sampr::Context<Self>;
-//! }
+//! impl sampr::Actor for MyActor {}
 //! ```
 //!
 //! After an actor has started, it can receive messages from any other actor (or other components
@@ -37,7 +35,7 @@
 //! # struct MyMessage(u8);
 //! # impl sampr::Message for MyMessage { type Result = bool; }
 //! # struct MyActor;
-//! # impl sampr::Actor for MyActor { type Context = sampr::Context<Self>; }
+//! # impl sampr::Actor for MyActor {}
 //! #[sampr::async_trait]
 //! impl sampr::Handler<MyMessage> for MyActor {
 //!   async fn handle(&mut self, msg: MyMessage, _ctx: &mut sampr::Context<Self>) -> bool {
@@ -55,7 +53,7 @@ mod error;
 pub use error::SamprError as Error;
 
 pub(crate) mod context;
-pub use context::{AsyncContext, Context};
+pub use context::Context;
 
 pub(crate) mod message;
 pub use message::{Handler, Message};

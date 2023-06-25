@@ -13,8 +13,6 @@ use futures::{
 use std::pin::Pin;
 use tokio::sync::mpsc;
 
-pub trait AsyncContext: Send {}
-
 pub struct Context<A: Actor> {
     addr: Addr<A>,
     tasks: Vec<Box<dyn ActorTask<A>>>,
@@ -22,7 +20,7 @@ pub struct Context<A: Actor> {
 
 impl<A> Context<A>
 where
-    A: Actor<Context = Self>,
+    A: Actor,
 {
     pub(crate) fn start(actor: A, addr: Addr<A>, msg_rx: mpsc::Receiver<Envelope<A>>) {
         // TODO maybe pass the join handle back to the user
@@ -71,8 +69,6 @@ where
     }
 }
 
-impl<A> AsyncContext for Context<A> where A: Actor<Context = Self> {}
-
 /// An future that is polled in the [Actor's](Actor) [Context] after being added through
 /// [Context::spawn()] or [Context::add_stream()].
 ///
@@ -90,7 +86,7 @@ trait ActorTask<A: Actor>: Stream<Item = Box<dyn TaskOutput<A>>> + Send + Unpin 
 /// their `Output`.
 #[async_trait]
 trait TaskOutput<A: Actor>: Send {
-    async fn call(&mut self, actor: &mut A, ctx: &mut A::Context);
+    async fn call(&mut self, actor: &mut A, ctx: &mut Context<A>);
 }
 
 /// An [ActorTask] created for async tasks spawned through [Context::spawn()].
@@ -99,7 +95,7 @@ trait TaskOutput<A: Actor>: Send {
 /// [Actor's](Actor) [Context].
 struct Spawned<A: Actor, O: Send> {
     future: Pin<Box<dyn Future<Output = O> + Send>>,
-    callback: Option<Box<dyn FnOnce(O, &mut A, &mut A::Context) + Send>>,
+    callback: Option<Box<dyn FnOnce(O, &mut A, &mut Context<A>) + Send>>,
 }
 
 impl<A: Actor, O: Send + 'static> ActorTask<A> for Spawned<A, O> {}
@@ -133,12 +129,12 @@ impl<A: Actor, O: Send + 'static> Stream for Spawned<A, O> {
 /// that this function is only called once.
 struct SpawnedOutput<A: Actor, O: Send> {
     result: Option<O>,
-    callback: Option<Box<dyn FnOnce(O, &mut A, &mut A::Context) + Send>>,
+    callback: Option<Box<dyn FnOnce(O, &mut A, &mut Context<A>) + Send>>,
 }
 
 #[async_trait]
 impl<A: Actor, O: Send> TaskOutput<A> for SpawnedOutput<A, O> {
-    async fn call(&mut self, actor: &mut A, ctx: &mut A::Context) {
+    async fn call(&mut self, actor: &mut A, ctx: &mut Context<A>) {
         // This function should not await in here.
         // Doing so would starve all of the actor's context's futures.
         let callback = self.callback.take().expect("call() is only called once");
@@ -203,7 +199,7 @@ struct StreamOutput<A: Actor, O: Send + Message + 'static> {
 impl<A: Actor + Handler<Option<O>>, O: Send + Message + 'static> TaskOutput<A>
     for StreamOutput<A, O>
 {
-    async fn call(&mut self, _actor: &mut A, _ctx: &mut A::Context) {
+    async fn call(&mut self, _actor: &mut A, _ctx: &mut Context<A>) {
         // TODO let Envelope take the oneshot optionally.
         if let Err(e) = self.addr.send_nowait(self.item.take()).await {
             log::warn!("Oh noes, no sendy send {e}");
@@ -212,14 +208,14 @@ impl<A: Actor + Handler<Option<O>>, O: Send + Message + 'static> TaskOutput<A>
 }
 
 struct Worker<A: Actor> {
-    ctx: A::Context,
+    ctx: Context<A>,
     actor: A,
     msg_rx: mpsc::Receiver<Envelope<A>>,
 }
 
 impl<A> Worker<A>
 where
-    A: Actor<Context = Context<A>>,
+    A: Actor,
 {
     async fn run(mut self) {
         let mut async_items = SelectAll::new();
