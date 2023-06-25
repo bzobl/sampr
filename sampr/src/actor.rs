@@ -53,6 +53,22 @@ impl<A: Actor> Addr<A> {
             .await
             .map_err(|_| Error::ReceiverShutdown)
     }
+
+    /// Stop the actor
+    ///
+    /// This will remove the actor from its background task and moves it back to the caller's
+    /// task.
+    ///
+    /// Any attempt to send messages to this Actor using [Addr::send()] will fail with
+    /// [Error::ReceiverShutdown].
+    pub async fn stop(self) -> Result<A, Error> {
+        let (tx, rx) = oneshot::channel();
+        self.msg_tx
+            .send(Envelope::stop(tx))
+            .await
+            .map_err(|_| Error::ReceiverShutdown)?;
+        Ok(rx.await.map_err(|_| Error::ReceiverShutdown)?)
+    }
 }
 
 /// An asynchronous actor.

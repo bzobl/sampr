@@ -70,13 +70,18 @@ where
     }
 }
 
-pub struct Envelope<A: Actor> {
-    msg: Box<dyn Deliver<A> + Send>,
+pub enum Envelope<A: Actor> {
+    Message(Box<dyn Deliver<A> + Send>),
+    Stop(oneshot::Sender<A>),
 }
 
 impl<A: Actor> fmt::Debug for Envelope<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Envelope").finish()
+        use Envelope::*;
+        match self {
+            Message(_) => write!(f, "Envelope::Message"),
+            Stop(_) => write!(f, "Envelope::Stop"),
+        }
     }
 }
 
@@ -86,15 +91,18 @@ impl<A: Actor> Envelope<A> {
         A: Handler<M>,
         M: Message + Send + 'static,
     {
-        Envelope {
-            msg: Box::new(EnvelopeWithMessage::new(msg, result_tx)),
-        }
+        Envelope::Message(Box::new(EnvelopeWithMessage::new(msg, result_tx)))
     }
-}
 
-#[async_trait]
-impl<A: Actor> Deliver<A> for Envelope<A> {
-    async fn deliver(&mut self, actor: &mut A, ctx: &mut A::Context) {
-        self.msg.deliver(actor, ctx).await;
+    pub fn stop(result_tx: oneshot::Sender<A>) -> Self {
+        Envelope::Stop(result_tx)
+    }
+
+    pub async fn deliver(&mut self, actor: &mut A, ctx: &mut A::Context) {
+        use Envelope::*;
+        match self {
+            Message(msg) => msg.deliver(actor, ctx).await,
+            Stop(_) => unreachable!("context::Worker will not call deliver on Stop"),
+        }
     }
 }

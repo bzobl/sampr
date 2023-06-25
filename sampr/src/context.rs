@@ -1,6 +1,6 @@
 use crate::{
     actor::{Actor, Addr},
-    message::{Deliver, Envelope, Handler, Message},
+    message::{Envelope, Handler, Message},
 };
 
 use async_trait::async_trait;
@@ -27,7 +27,7 @@ where
     pub(crate) fn start(actor: A, addr: Addr<A>, msg_rx: mpsc::Receiver<Envelope<A>>) {
         // TODO maybe pass the join handle back to the user
         tokio::task::spawn(async move {
-            let mut worker = Worker {
+            let worker = Worker {
                 ctx: Context {
                     addr,
                     tasks: vec![],
@@ -221,7 +221,7 @@ impl<A> Worker<A>
 where
     A: Actor<Context = Context<A>>,
 {
-    async fn run(&mut self) {
+    async fn run(mut self) {
         let mut async_items = SelectAll::new();
 
         self.actor.started(&mut self.ctx);
@@ -254,6 +254,14 @@ where
                     }
                 }
             };
+
+            if let Envelope::Stop(tx) = envelope {
+                self.actor.stopped();
+                if tx.send(self.actor).is_err() {
+                    log::warn!("sending actor back to stop failed");
+                }
+                return;
+            }
 
             // This is split in two loops as an Actor can only process
             // on Message at a time). Therefore, msg_rx is not polled while
