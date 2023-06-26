@@ -1,7 +1,15 @@
 [package]
 name = "sampr"
+description = "A message passing framework using actors"
+keywords = ["actor", "async", "actix", "tokio"]
+categories = ["asynchronous"]
 version = "0.1.0"
+authors = ["Bernd Zobl"] 
 edition = "2021"
+homepage = "https://github.com/bzobl/sampr"
+repository = "https://github.com/bzobl/sampr"
+readme = "../README.md"
+license-file = "../LICENSE"
 
 [dependencies]
 async-trait = "0.1.61"
